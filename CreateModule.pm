@@ -45,6 +45,7 @@ sub create_loadmodule {
 		};
 		if ($self->rerun) {
 			$self->seen({});
+			$self->seenset({});
 			$self->rewrite(1);
 			$self->rewrites({});
 			dump $self->collisions;
@@ -161,7 +162,14 @@ sub rewrite_module {
 			push @{$self->{tree}->{$new_module}}, $file;
 			# rewrite???
 			if ($new_module =~ /^\.\.?\//) {
-				$ret .= $self->include_module($new_module, $new_module, $dir);
+				my $new_dir = $dir;
+				if (($module =~ './lib/WebSocket') ||
+					($module =~ './lib/Sender') ||
+					($module =~ './lib/Receiver')
+				) {
+					$new_dir = File::Spec->catfile($dir, 'lib');
+				}
+				$ret .= $self->include_module($new_module, $new_module, $new_dir);
 			}
 			else {
 				$ret .= $self->include_module($new_module, $new_module, "node_modules");
