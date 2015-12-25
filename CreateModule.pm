@@ -12,7 +12,7 @@ has 'collisions' => (is => 'ro', isa => 'ArrayRef', default => sub { []; });
 has 'rerun' => (is => 'rw');
 has 'rewrite' => (is => 'rw');
 has 'seenset' => (is => 'rw', isa => 'HashRef', default => sub { {}; });
-
+has 'rewrites' => (is => 'rw', isa => 'HashRef', default => sub { {}; });
 
 sub create_loadmodule {
 	my ($self, $module) = @_;
@@ -46,6 +46,7 @@ sub create_loadmodule {
 		if ($self->rerun) {
 			$self->seen({});
 			$self->rewrite(1);
+			$self->rewrites({});
 			dump $self->collisions;
 			exit(0);
 			# die "Collisions";
@@ -60,12 +61,11 @@ sub create_loadmodule {
 sub include_module {
 	my ($self, $module, $file, $dir) = @_;
 	if ($self->seenset->{"$module - $file - $dir"}) {
-		warn "$module - $file - $dir";
-		exit(0);
+		warn "seen!! $module - $file - $dir";
 		return '';
 	}
 	$self->seenset->{"$module - $file - $dir"}++;
-	warn "Including $file, $module, $dir";
+	# warn "Including $file, $module, $dir";
 
 	my $ret = '';
 	my $fn = File::Spec->catfile($dir, $file);
@@ -98,7 +98,7 @@ sub include_module {
 		$ret .= $reg;
 	}
 	else {
-		warn "Funky town $file, $module, $dir";
+		warn "Funky town $file, $module, $dir, $fn";
 		die "funky town";
 	}
 	return $ret;
@@ -121,7 +121,7 @@ sub register {
 
 	$self->seen->{$module} = $fn;
 
-	warn $fn;
+	# warn $fn;
 	# mkdir 'fusejs_lib';
 
 	return 'Register("'. $module .'", new FileModule(import BundleFile("'. $fn .'")));'."\n";
@@ -141,8 +141,13 @@ sub rewrite_module {
 	my ($self, $module, $file, $dir) = @_;
 	mkdir 'fusejs_lib';
 
-	my $fn = File::Spec->catfile('fusejs_lib', $file);
+	my $fn_file = $file;
+	$fn_file =~ s/[^\w]/_/g;
+
+	my $fn = File::Spec->catfile('fusejs_lib', $fn_file);
 	my $ret = '';
+
+	$self->rewrites->{$file} = $fn;
 
 	open my $in, '<', $file || die "$file: $!";
 	open my $out, '>', $fn || die "$fn : $!";
@@ -156,7 +161,7 @@ sub rewrite_module {
 
 			push @{$self->{tree}->{$new_module}}, $file;
 			# rewrite???
-			if ($new_module =~ /^\.\//) {
+			if ($new_module =~ /^\.\.?\//) {
 				$ret .= $self->include_module($new_module, $new_module, $dir);
 			}
 			else {
@@ -179,18 +184,25 @@ sub parse_module {
 		return $lself->rewrite_module(@_);
 	}
 	my $ret = '';
-	warn "Reading $file, $module, $dir";
+	# warn "Reading $file, $module, $dir";
 	open my $fh, '<', $file || die "$file: $!";
 	while (<$fh>) {
 		# warn "\t" . $_ if /parser/;
 		if (/require\s*\(['"]([\w\.\/\-]+)['"]\)/) {
 			my $new_module = $1;
-			warn "require $new_module ($file)";
+			warn "require $new_module ($file) $module";
 
 			push @{$self->{tree}->{$new_module}}, $file;
 			# rewrite???
-			if ($new_module =~ /^\.\//) {
-				$ret .= $self->include_module($new_module, $new_module, $dir);
+			if ($new_module =~ /^\.\.?\//) {
+				my $new_dir = $dir;
+				if (($module =~ './lib/WebSocket') ||
+					($module =~ './lib/Sender') ||
+					($module =~ './lib/Receiver')
+				) {
+					$new_dir = File::Spec->catfile($dir, 'lib');
+				}
+				$ret .= $self->include_module($new_module, $new_module, $new_dir);
 			}
 			else {
 				$ret .= $self->include_module($new_module, $new_module, "node_modules");
