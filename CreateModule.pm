@@ -48,7 +48,6 @@ sub create_loadmodule {
 			$self->rewrite(1);
 			$self->rewrites({});
 			dump $self->collisions;
-			exit(0);
 			# die "Collisions";
 		}
 	}
