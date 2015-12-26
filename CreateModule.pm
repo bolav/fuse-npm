@@ -12,6 +12,7 @@ has 'collisions' => (is => 'ro', isa => 'ArrayRef', default => sub { []; });
 has 'rerun' => (is => 'rw');
 has 'rewrite' => (is => 'rw');
 has 'seenset' => (is => 'rw', isa => 'HashRef', default => sub { {}; });
+has 'babel' => (is => 'rw', isa => 'HashRef', default => sub { {}; });
 has 'rewrites' => (is => 'rw', isa => 'HashRef', default => sub { {}; });
 
 sub create_loadmodule {
@@ -108,17 +109,22 @@ sub register {
 	my ($self, $module, $fn) = @_;
 
 	$fn = $self->rewrites->{$fn} if ($self->rewrites->{$fn});
+	warn 'Register ' . $module . ', ' . $fn;
 
 	if ($self->seen->{$module}) {
 		# warn "Already have $module (".$self->seen->{$module}.") $fn";
 		if ($fn ne $self->seen->{$module}) {
-			$self->rerun(1);
-			push @{$self->collisions}, $module;
 			if ($self->rewrite) {
 				warn "Still seen ";
+				warn dump $self->collisions;
 				warn "Already have $module (".$self->seen->{$module}.") $fn";
+
 				exit(0);
 			}
+
+			$self->rerun(1);
+			push @{$self->collisions}, $module;
+
 			# $self->seen({});
 			# $self->rerun(0);
 			# die "Name collision $module " . $self->seen->{$module} . " $fn" ;
@@ -137,9 +143,12 @@ sub register {
 sub trouble_file {
 	my ($self, $module) = @_;
 	return 0 unless ($self->rewrite);
-	warn "Checking $module";
+	warn "trouble_file $module";
+	return 1 if ($self->babel->{$module});
 	foreach my $c (@{$self->collisions}) {
-		return 1 if $self->tree->{$c};
+		foreach my $m (@{$self->tree->{$c}}) {
+			return 1 if ($m eq $module);
+		}
 	}
 	return 0;
 }
@@ -147,6 +156,7 @@ sub trouble_file {
 sub rewrite_name {
 	my ($self, $module, $dir) = @_;
 	foreach my $c (@{$self->collisions}) {
+		warn "rewrite_name $module eq $c";
 		if ($module eq $c) {
 			warn "Trouble with $c ($dir)";
 			return $c. '__'. $dir;
@@ -157,6 +167,8 @@ sub rewrite_name {
 
 sub rewrite_module {
 	my ($self, $module, $file, $dir) = @_;
+
+	my $rewrite = 0;
 	mkdir 'fusejs_lib';
 
 	my $fn_file = $file;
@@ -166,6 +178,12 @@ sub rewrite_module {
 	my $ret = '';
 
 	$self->rewrites->{$file} = $fn;
+
+	if ($self->babel->{$file}) {
+		warn "babel $file";
+		system("babel $file > $fn");
+		return;
+	}
 
 	open my $in, '<', $file || die "$file: $!";
 	open my $out, '>', $fn || die "$fn : $!";
@@ -215,6 +233,7 @@ sub parse_module {
 		return $lself->rewrite_module(@_);
 	}
 	my $ret = '';
+	my $set_trouble = 0;
 	# warn "Reading $file, $module, $dir";
 	open my $fh, '<', $file || die "$file: $!";
 	while (<$fh>) {
@@ -239,7 +258,13 @@ sub parse_module {
 				$ret .= $self->include_module($new_module, $new_module, "node_modules");
 			}
 		}
+		if (/^\s*const/) {
+			$self->babel->{$file}++;
+			warn "Reading $file, $module, $dir";
+			warn "Illegal definition const";
+		}
 	}
+
 	close $fh;
 	return $ret;
 }
