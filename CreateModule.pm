@@ -144,7 +144,6 @@ sub trouble_file {
 	my ($self, $module) = @_;
 	return 0 unless ($self->rewrite);
 	warn "trouble_file $module";
-	return 1 if ($self->babel->{$module});
 	foreach my $c (@{$self->collisions}) {
 		foreach my $m (@{$self->tree->{$c}}) {
 			return 1 if ($m eq $module);
@@ -165,30 +164,46 @@ sub rewrite_name {
 	return;
 }
 
-sub rewrite_module {
+sub parse_module {
 	my ($self, $module, $file, $dir) = @_;
 
 	my $rewrite = 0;
-	mkdir 'fusejs_lib';
 
+	if ($self->trouble_file($file)) {
+		$rewrite = 1;
+	}
+
+	my $open_file = $file; # Filename to open, and process
 	my $fn_file = $file;
-	$fn_file =~ s/[^\w]/_/g;
+	$fn_file =~ s/[^\w\.]/_/g;
 
 	my $fn = File::Spec->catfile('fusejs_lib', $fn_file);
 	my $ret = '';
 
-	$self->rewrites->{$file} = $fn;
-
 	if ($self->babel->{$file}) {
 		warn "babel $file";
+		if ($rewrite) {
+			warn "babel and rewrite";
+			exit(0);
+		}
 		system("babel $file > $fn");
-		return;
+		$self->rewrites->{$file} = $fn;
+		$open_file = $fn;
 	}
 
-	open my $in, '<', $file || die "$file: $!";
-	open my $out, '>', $fn || die "$fn : $!";
+	if ($rewrite) {
+		mkdir 'fusejs_lib';
+		$self->rewrites->{$file} = $fn;
+	}
 
-	warn "Rewriting $module, $file, $fn";
+	open my $in, '<', $open_file || die "$file: $!";
+	my $out;
+
+	if ($rewrite) {
+		open $out, '>', $fn || die "$fn : $!";
+		warn "Rewriting $module, $file, $fn";
+	}
+
 
 	while (my $line = <$in>) {
 		if ($line =~ /require\s*\(['"]([\w\.\/\-]+)['"]\)/) {
@@ -217,55 +232,27 @@ sub rewrite_module {
 				$ret .= $self->include_module($new_module, $new_module, "node_modules");
 			}
 		}
-
-		print $out $line;
-	}
-	close $in;
-	close $out;
-	return $ret;
-}
-
-sub parse_module {
-	my ($self, $module, $file, $dir) = @_;
-
-	if ($self->trouble_file($file)) {
-		my $lself = shift @_;
-		return $lself->rewrite_module(@_);
-	}
-	my $ret = '';
-	my $set_trouble = 0;
-	# warn "Reading $file, $module, $dir";
-	open my $fh, '<', $file || die "$file: $!";
-	while (<$fh>) {
-		# warn "\t" . $_ if /parser/;
-		if (/require\s*\(['"]([\w\.\/\-]+)['"]\)/) {
-			my $new_module = $1;
-			warn "require $new_module ($file) $module";
-
-			push @{$self->{tree}->{$new_module}}, $file;
-			# rewrite???
-			if ($new_module =~ /^\.\.?\//) {
-				my $new_dir = $dir;
-				if (($module =~ './lib/WebSocket') ||
-					($module =~ './lib/Sender') ||
-					($module =~ './lib/Receiver')
-				) {
-					$new_dir = File::Spec->catfile($dir, 'lib');
-				}
-				$ret .= $self->include_module($new_module, $new_module, $new_dir);
-			}
-			else {
-				$ret .= $self->include_module($new_module, $new_module, "node_modules");
-			}
+		if ($line =~ /\bprocess\b/) {
+			warn 'process API is not available in Fuse ('. $file .')';
+			warn $line;
+			exit(0);
 		}
-		if (/^\s*const/) {
+		if (($line =~ /^\s*const/)
+
+			){
 			$self->babel->{$file}++;
 			warn "Reading $file, $module, $dir";
-			warn "Illegal definition const";
+			warn "Illegal definition const, adding babel preprocessing";
+		}
+
+		if ($rewrite) {
+			print $out $line;
 		}
 	}
-
-	close $fh;
+	close $in;
+	if ($rewrite) {
+		close $out;
+	}
 	return $ret;
 }
 
