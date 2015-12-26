@@ -107,11 +107,18 @@ sub include_module {
 sub register {
 	my ($self, $module, $fn) = @_;
 
+	$fn = $self->rewrites->{$fn} if ($self->rewrites->{$fn});
+
 	if ($self->seen->{$module}) {
 		# warn "Already have $module (".$self->seen->{$module}.") $fn";
 		if ($fn ne $self->seen->{$module}) {
 			$self->rerun(1);
 			push @{$self->collisions}, $module;
+			if ($self->rewrite) {
+				warn "Still seen ";
+				warn "Already have $module (".$self->seen->{$module}.") $fn";
+				exit(0);
+			}
 			# $self->seen({});
 			# $self->rerun(0);
 			# die "Name collision $module " . $self->seen->{$module} . " $fn" ;
@@ -137,6 +144,17 @@ sub trouble_file {
 	return 0;
 }
 
+sub rewrite_name {
+	my ($self, $module, $dir) = @_;
+	foreach my $c (@{$self->collisions}) {
+		if ($module eq $c) {
+			warn "Trouble with $c ($dir)";
+			return $c. '__'. $dir;
+		}
+	}
+	return;
+}
+
 sub rewrite_module {
 	my ($self, $module, $file, $dir) = @_;
 	mkdir 'fusejs_lib';
@@ -154,14 +172,20 @@ sub rewrite_module {
 
 	warn "Rewriting $module, $file, $fn";
 
-	while (<$in>) {
-		if (/require\s*\(['"]([\w\.\/\-]+)['"]\)/) {
+	while (my $line = <$in>) {
+		if ($line =~ /require\s*\(['"]([\w\.\/\-]+)['"]\)/) {
 			my $new_module = $1;
 			warn "require $new_module ($file)";
 
 			push @{$self->{tree}->{$new_module}}, $file;
 			# rewrite???
 			if ($new_module =~ /^\.\.?\//) {
+				my $rew_module = $new_module;
+				if (my $r = $self->rewrite_name($new_module, $dir)) {
+					$rew_module = $r;
+					$line =~ s/\Q$new_module\E/$rew_module/;
+					warn "Rewriteing require ($new_module): $_";
+				}
 				my $new_dir = $dir;
 				if (($module =~ './lib/WebSocket') ||
 					($module =~ './lib/Sender') ||
@@ -169,14 +193,14 @@ sub rewrite_module {
 				) {
 					$new_dir = File::Spec->catfile($dir, 'lib');
 				}
-				$ret .= $self->include_module($new_module, $new_module, $new_dir);
+				$ret .= $self->include_module($rew_module, $new_module, $new_dir);
 			}
 			else {
 				$ret .= $self->include_module($new_module, $new_module, "node_modules");
 			}
 		}
 
-		print $out $_;
+		print $out $line;
 	}
 	close $in;
 	close $out;
