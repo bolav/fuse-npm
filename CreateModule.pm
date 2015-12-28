@@ -7,6 +7,7 @@ use Try::Tiny;
 use Data::Dump qw/dump/;
 
 has 'seen' => (is => 'rw', isa => 'HashRef', default => sub { {}; });
+has 'file_module' => (is => 'ro', isa => 'HashRef', default => sub { {}; });
 has 'tree' => (is => 'ro', isa => 'HashRef', default => sub { {}; });
 has 'collisions' => (is => 'ro', isa => 'ArrayRef', default => sub { []; });
 has 'rerun' => (is => 'rw');
@@ -14,6 +15,22 @@ has 'rewrite' => (is => 'rw');
 has 'seenset' => (is => 'rw', isa => 'HashRef', default => sub { {}; });
 has 'babel' => (is => 'rw', isa => 'HashRef', default => sub { {}; });
 has 'rewrites' => (is => 'rw', isa => 'HashRef', default => sub { {}; });
+
+sub builtin {
+	my ($self, $module) = @_;
+	my $rew = {
+		'tty' => 'tty-browserify',
+		'debug' => '_empty.js',
+		'fs' => '_empty.js',
+		'xmlhttprequest' => '_empty.js',
+		'url' => 'browserify_modules/url',
+		'buffer' => 'browserify_modules/buffer',
+		'ws' => '_empty.js',
+		# Just to find it:
+		'ieee754' => 'browserify_modules/ieee754',
+	};
+	return $rew->{$module} || $module;
+}
 
 sub create_loadmodule {
 	my ($self, $module) = @_;
@@ -70,7 +87,7 @@ sub include_module {
 
 	my $ret = '';
 	my $fn = File::Spec->catfile($dir, $file);
-	# warn $fn;
+	warn $fn;
 	if (-d $fn) {
 		if (-e File::Spec->catfile($fn, 'index.js')) {
 			$ret .= $self->include_module($module, "index.js", $fn);
@@ -80,6 +97,10 @@ sub include_module {
 		}
 	}
 	elsif (-e $fn) {
+		my $fn_js;
+		my ($new_dir, $fn_js) = ($fn =~ /^(.*\/)([^\/]+)$/);
+		$dir = $new_dir if ($new_dir);
+		warn "$fn $dir";
 		$ret .= $self->parse_module($module, $fn, $dir);
 		my $reg = $self->register($module, $fn);
 		return $ret unless ($reg);
@@ -145,7 +166,7 @@ sub trouble_file {
 	return 0 unless ($self->rewrite);
 	warn "trouble_file $module";
 	foreach my $c (@{$self->collisions}) {
-		foreach my $m (@{$self->tree->{$c}}) {
+		foreach my $m (@{$self->file_module->{$c}}) {
 			return 1 if ($m eq $module);
 		}
 	}
@@ -208,9 +229,11 @@ sub parse_module {
 	while (my $line = <$in>) {
 		if ($line =~ /require\s*\(['"]([\w\.\/\-]+)['"]\)/) {
 			my $new_module = $1;
+			$new_module = $self->builtin($new_module);
 			warn "require $new_module ($file)";
 
-			push @{$self->{tree}->{$new_module}}, $file;
+			push @{$self->file_module->{$new_module}}, $file;
+			push @{$self->tree->{$new_module}}, $module;
 			# rewrite???
 			if ($new_module =~ /^\.\.?\//) {
 				my $rew_module = $new_module;
@@ -232,8 +255,9 @@ sub parse_module {
 				$ret .= $self->include_module($new_module, $new_module, "node_modules");
 			}
 		}
-		if ($line =~ /\bprocess\b/) {
+		if ($line =~ /\bprocess\b[^\']/) {
 			warn 'process API is not available in Fuse ('. $file .')';
+			$self->dump_tree($module);
 			warn $line;
 			exit(0);
 		}
@@ -254,6 +278,17 @@ sub parse_module {
 		close $out;
 	}
 	return $ret;
+}
+
+sub dump_tree {
+	my ($self, $module, $indent) = @_;
+	$indent ||= '';
+	$indent = '  ' . $indent;
+	warn "$indent Module : $module";
+	if ($self->tree->{$module}) {
+		warn dump $self->tree->{$module};
+		$self->dump_tree($self->tree->{$module}->[0], $indent);
+	}
 }
 
 sub parse_packagejson {
