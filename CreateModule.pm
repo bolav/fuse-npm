@@ -6,6 +6,7 @@ use JSON;
 use Try::Tiny;
 use Data::Dump qw/dump/;
 use FindBin;
+use Cwd;
 
 has 'seen' => (is => 'rw', isa => 'HashRef', default => sub { {}; });
 has 'file_module' => (is => 'ro', isa => 'HashRef', default => sub { {}; });
@@ -20,18 +21,32 @@ has 'rewrites' => (is => 'rw', isa => 'HashRef', default => sub { {}; });
 sub builtin {
 	my ($self, $module) = @_;
 	my $rew = {
-		'tty' => 'tty-browserify',
-		'debug' => $FindBin::Bin . '/jslib/_empty.js',
-		'fs' => $FindBin::Bin . '/jslib/_empty.js',
+		'buffer'         => $FindBin::Bin . '/node_modules/buffer',
+		'child_process'  => $FindBin::Bin . '/jslib/_empty.js',
+		'crypto'         => 'crypto-browserify',
+		'debug'          => $FindBin::Bin . '/jslib/_empty.js',
+		'dgram'          => $FindBin::Bin . '/jslib/_empty.js',
+		'dns'            => $FindBin::Bin . '/jslib/_empty.js',
+		'events'         => $FindBin::Bin . '/node_modules/events',
+		'fs'             => $FindBin::Bin . '/jslib/_empty.js',
+		'http'           => 'stream-http',
+		'https'          => 'https-browserify',
+		'net'            => $FindBin::Bin . '/jslib/_empty.js',
+		'stream'         => 'stream-browserify',
+		'_stream_duplex' =>'readable-stream/duplex.js',
+		'_stream_passthrough' =>'readable-stream/passthrough.js',
+		'_stream_readable' =>'readable-stream/readable.js',
+		'_stream_transform' =>'readable-stream/transform.js',
+		'_stream_writable' =>'readable-stream/writable.js',
+		'tty'            => 'tty-browserify',
+		'url'            => $FindBin::Bin . '/node_modules/url',
+		'util'           => $FindBin::Bin . '/node_modules/util/util.js',
+		'tls'            => $FindBin::Bin . '/jslib/_empty.js',
+		'tty'            => 'tty-browserify',
+		'vm'             => 'vm-browserify',
+		'ws'             => $FindBin::Bin . '/jslib/_empty.js',
 		'xmlhttprequest' => $FindBin::Bin . '/jslib/_empty.js',
-		'url' => 'browserify_modules/url',
-		'buffer' => 'browserify_modules/buffer',
-		'events' => 'browserify_modules/events',
-		'ws' => $FindBin::Bin . '/jslib/_empty.js',
-		'net' => $FindBin::Bin . '/jslib/_empty.js',
-		'util' => 'browserify_modules/util/util.js',
-		# Just to find it:
-		'ieee754' => 'browserify_modules/ieee754',
+		'zlib'           => 'browserify-zlib',
 	};
 	return $rew->{$module} || $module;
 }
@@ -71,6 +86,7 @@ sub create_loadmodule {
 			$self->rewrite(1);
 			$self->rewrites({});
 			dump $self->collisions;
+			# exit(0);
 			# die "Collisions";
 		}
 	}
@@ -89,12 +105,30 @@ sub include_module {
 	$self->seenset->{"$module - $file - $dir"}++;
 	# warn "Including $file, $module, $dir";
 
+
 	my $ret = '';
 	my $fn = File::Spec->catfile($dir, $file);
 	if ($file =~ /^\//) {
 		$fn = $file;
 	}
 	warn $fn;
+	if (!-e $fn) {
+		if (-f $fn . '.js') {
+			$fn .= '.js';
+		}
+		elsif (-e $FindBin::Bin .'/'. $fn) {
+			warn "We have it locally";
+			$fn = $FindBin::Bin .'/'. $fn;
+		}
+		elsif (-e $FindBin::Bin .'/'. $fn . '.js') {
+			warn "We have it locally";
+			$fn = $FindBin::Bin .'/'. $fn . '.js';
+		}
+		else {
+			warn "Missing $fn";
+		}
+	}
+
 	if (-d $fn) {
 		if (-e File::Spec->catfile($fn, 'index.js')) {
 			$ret .= $self->include_module($module, "index.js", $fn);
@@ -103,7 +137,13 @@ sub include_module {
 			$ret .= $self->parse_packagejson($module, $fn);
 		}
 	}
-	elsif (-e $fn) {
+	elsif (-f $fn && $fn =~ /\.json/) {
+		warn "Importing .json";
+		push @{$self->collisions}, $module;
+		$fn = $self->rewrite_json($fn);
+		$ret .= $self->register($module, $fn);
+	}
+	elsif (-f $fn) {
 		my ($new_dir, $fn_js) = ($fn =~ /^(.*\/)([^\/]+)$/);
 		$dir = $new_dir if ($new_dir);
 		warn "$fn $dir";
@@ -112,16 +152,7 @@ sub include_module {
 		return $ret unless ($reg);
 		$ret .= $reg;
 	}
-	elsif (-e $fn . '.js') {
-		my ($new_dir, $fn_js) = ($fn =~ /^(.*\/)([^\/]+)$/);
-		$dir = $new_dir if ($new_dir);
-		warn "$fn $dir";
-		$ret .= $self->parse_module($module, $fn . '.js' , $dir);
-		my $reg = $self->register($module, $fn . '.js');
-		return $ret unless ($reg);
-		$ret .= $reg;
-	}
-	elsif (-e '/Users/bolav/dev/socket.io/node/lib/' . $module . '.js' ) {
+	elsif (-f '/Users/bolav/dev/socket.io/node/lib/' . $module . '.js' ) {
 		$fn = '/Users/bolav/dev/socket.io/node/lib/' . $module . '.js';
 		$ret .= $self->parse_module($module, $fn, '/Users/bolav/dev/socket.io/node/lib/');
 		my $reg = $self->register($module, $fn);
@@ -185,7 +216,6 @@ sub trouble_file {
 sub rewrite_name {
 	my ($self, $module, $dir) = @_;
 	foreach my $c (@{$self->collisions}) {
-		warn "rewrite_name $module eq $c";
 		if ($module eq $c) {
 			warn "Trouble with $c ($dir)";
 			return $c. '__'. $dir;
@@ -212,17 +242,12 @@ sub parse_module {
 
 	if ($self->babel->{$file}) {
 		warn "babel $file";
+		$open_file = $fn;
 		if ($rewrite) {
 			warn "babel and rewrite";
-			exit(0);
+			$open_file .= '_babel';
 		}
-		system("babel $file > $fn");
-		$self->rewrites->{$file} = $fn;
-		$open_file = $fn;
-	}
-
-	if ($rewrite) {
-		mkdir 'fusejs_lib';
+		system("babel --plugins object-assign $file > $open_file");
 		$self->rewrites->{$file} = $fn;
 	}
 
@@ -230,13 +255,18 @@ sub parse_module {
 	my $out;
 
 	if ($rewrite) {
+		mkdir 'fusejs_lib';
+		$self->rewrites->{$file} = $fn;
 		open $out, '>', $fn || die "$fn : $!";
 		warn "Rewriting $module, $file, $fn";
 	}
 
 
 	while (my $line = <$in>) {
-		if ($line =~ /require\s*\(['"]([\w\.\/\-]+)['"]\)/) {
+		my $det_line = $line;
+		$det_line =~ s/\/\/.*$//;
+
+		if ($det_line =~ /require\s*\(['"]([\w\.\/\-]+)['"]\)/) {
 			my $new_module = $1;
 			$new_module = $self->builtin($new_module);
 			warn "require $new_module ($file)";
@@ -246,35 +276,31 @@ sub parse_module {
 			# rewrite???
 			if ($new_module =~ /^\.\.?\//) {
 				my $rew_module = $new_module;
-				warn "new: $new_module";
 				if (my $r = $self->rewrite_name($new_module, $dir)) {
 					$rew_module = $r;
 					$line =~ s/\Q$new_module\E/$rew_module/;
 					warn "Rewriteing require ($new_module): $_";
 				}
 				my $new_dir = $dir;
-				if (($module =~ './lib/WebSocket') ||
-					($module =~ './lib/Sender') ||
-					($module =~ './lib/Receiver')
-				) {
-					$new_dir = File::Spec->catfile($dir, 'lib');
-				}
+				warn "new: $new_module $new_dir";
+				$new_dir = Cwd::abs_path( $new_dir );
 				$ret .= $self->include_module($rew_module, $new_module, $new_dir);
 			}
 			else {
 				$ret .= $self->include_module($new_module, $new_module, "node_modules");
 			}
 		}
-		if ($line =~ /\bprocess\b[^\'\s\)]/) {
+		if ($det_line =~ /\bprocess\.binding\b/) {
 			warn 'process API is not available in Fuse ('. $file .')';
 			$self->dump_tree($module);
 			warn $line;
 			exit(0);
 		}
-		if (($line =~ /^\s*const/)
-
+		if (($det_line =~ /^\s*const/) ||
+			($det_line =~ /Object\.assign/)
 			){
 			$self->babel->{$file}++;
+			push @{$self->collisions}, $module;
 			warn "Reading $file, $module, $dir";
 			warn "Illegal definition const, adding babel preprocessing";
 		}
@@ -300,6 +326,27 @@ sub dump_tree {
 		# warn dump $self->file_module->{$module};
 		$self->dump_tree($self->tree->{$module}->[0], $indent);
 	}
+}
+
+sub rewrite_json {
+	my ($self, $filename) = @_;
+	return unless ($self->rewrite);
+
+	mkdir 'fusejs_lib';
+	my $fn_file = $filename;
+	$fn_file =~ s/[^\w\.]/_/g;
+	my $fn = File::Spec->catfile('fusejs_lib', $fn_file);
+
+	open my $in, '<', $filename || die "$filename: $!";
+	open my $out, '>', $fn || die "$fn : $!";
+	
+	print $out 'module.exports = ';
+	while (<$in>) {
+		print $out $_;
+	}
+	print $out ';' . "\n";
+	$self->rewrites->{$filename} = $fn;
+	return $fn;
 }
 
 sub parse_packagejson {

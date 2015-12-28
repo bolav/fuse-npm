@@ -1,0 +1,31 @@
+{
+  "name": "fuse-npm",
+  "version": "0.0.1",
+  "description": "add requires for Fuse",
+  "repository": {
+    "type": "git",
+    "url": "http://github.com/bolav"
+  },
+  "dependencies": {
+    "assert": "~1.3.0",
+    "browserify-zlib": "~0.1.2",
+    "buffer": "^3.4.3",
+    "concat-stream": "~1.5.1",
+    "crypto-browserify": "^3.0.0",
+    "events": "~1.1.0",
+    "https-browserify": "~0.0.0",
+    "readable-stream": "^2.0.2",
+    "stream-browserify": "^2.0.0",
+    "stream-http": "^2.0.0",
+    "tty-browserify": "~0.0.0",
+    "url": "~0.11.0",
+    "util": "~0.10.1",
+    "vm-browserify": "~0.0.1",
+  },
+  "author": {
+    "name": "Bjorn-Olav Strand",
+    "email": "bolav@ikke.no",
+    "url": "http://www.ikke.no"
+  },
+  "license": "All rights reserved"
+}
