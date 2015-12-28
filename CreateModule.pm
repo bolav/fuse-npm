@@ -5,6 +5,7 @@ use File::Spec;
 use JSON;
 use Try::Tiny;
 use Data::Dump qw/dump/;
+use FindBin;
 
 has 'seen' => (is => 'rw', isa => 'HashRef', default => sub { {}; });
 has 'file_module' => (is => 'ro', isa => 'HashRef', default => sub { {}; });
@@ -20,12 +21,15 @@ sub builtin {
 	my ($self, $module) = @_;
 	my $rew = {
 		'tty' => 'tty-browserify',
-		'debug' => '_empty.js',
-		'fs' => '_empty.js',
-		'xmlhttprequest' => '_empty.js',
+		'debug' => $FindBin::Bin . '/jslib/_empty.js',
+		'fs' => $FindBin::Bin . '/jslib/_empty.js',
+		'xmlhttprequest' => $FindBin::Bin . '/jslib/_empty.js',
 		'url' => 'browserify_modules/url',
 		'buffer' => 'browserify_modules/buffer',
-		'ws' => '_empty.js',
+		'events' => 'browserify_modules/events',
+		'ws' => $FindBin::Bin . '/jslib/_empty.js',
+		'net' => $FindBin::Bin . '/jslib/_empty.js',
+		'util' => 'browserify_modules/util/util.js',
 		# Just to find it:
 		'ieee754' => 'browserify_modules/ieee754',
 	};
@@ -87,6 +91,9 @@ sub include_module {
 
 	my $ret = '';
 	my $fn = File::Spec->catfile($dir, $file);
+	if ($file =~ /^\//) {
+		$fn = $file;
+	}
 	warn $fn;
 	if (-d $fn) {
 		if (-e File::Spec->catfile($fn, 'index.js')) {
@@ -97,7 +104,6 @@ sub include_module {
 		}
 	}
 	elsif (-e $fn) {
-		my $fn_js;
 		my ($new_dir, $fn_js) = ($fn =~ /^(.*\/)([^\/]+)$/);
 		$dir = $new_dir if ($new_dir);
 		warn "$fn $dir";
@@ -107,6 +113,9 @@ sub include_module {
 		$ret .= $reg;
 	}
 	elsif (-e $fn . '.js') {
+		my ($new_dir, $fn_js) = ($fn =~ /^(.*\/)([^\/]+)$/);
+		$dir = $new_dir if ($new_dir);
+		warn "$fn $dir";
 		$ret .= $self->parse_module($module, $fn . '.js' , $dir);
 		my $reg = $self->register($module, $fn . '.js');
 		return $ret unless ($reg);
@@ -237,6 +246,7 @@ sub parse_module {
 			# rewrite???
 			if ($new_module =~ /^\.\.?\//) {
 				my $rew_module = $new_module;
+				warn "new: $new_module";
 				if (my $r = $self->rewrite_name($new_module, $dir)) {
 					$rew_module = $r;
 					$line =~ s/\Q$new_module\E/$rew_module/;
@@ -255,7 +265,7 @@ sub parse_module {
 				$ret .= $self->include_module($new_module, $new_module, "node_modules");
 			}
 		}
-		if ($line =~ /\bprocess\b[^\']/) {
+		if ($line =~ /\bprocess\b[^\'\s\)]/) {
 			warn 'process API is not available in Fuse ('. $file .')';
 			$self->dump_tree($module);
 			warn $line;
@@ -287,6 +297,7 @@ sub dump_tree {
 	warn "$indent Module : $module";
 	if ($self->tree->{$module}) {
 		warn dump $self->tree->{$module};
+		# warn dump $self->file_module->{$module};
 		$self->dump_tree($self->tree->{$module}->[0], $indent);
 	}
 }
