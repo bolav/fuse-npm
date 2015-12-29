@@ -140,6 +140,7 @@ sub include_module {
 	elsif (-f $fn && $fn =~ /\.json/) {
 		warn "Importing .json";
 		push @{$self->collisions}, $module;
+		$self->rerun(1);
 		$fn = $self->rewrite_json($fn);
 		$ret .= $self->register($module, $fn);
 	}
@@ -247,7 +248,7 @@ sub parse_module {
 			warn "babel and rewrite";
 			$open_file .= '_babel';
 		}
-		system("babel --plugins object-assign $file > $open_file");
+		system("babel $file > $open_file");
 		$self->rewrites->{$file} = $fn;
 	}
 
@@ -301,6 +302,7 @@ sub parse_module {
 			){
 			$self->babel->{$file}++;
 			push @{$self->collisions}, $module;
+			$self->rerun(1);
 			warn "Reading $file, $module, $dir";
 			warn "Illegal definition const, adding babel preprocessing";
 		}
