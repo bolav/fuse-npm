@@ -1,6 +1,8 @@
 
 
-`node loadmodules.js `
+`node loadmodules.js <package>` in your Fuse app dir
+
+Then just <LoadModules /> in your UX.
 
 
 TODO:
