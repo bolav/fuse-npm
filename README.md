@@ -23,14 +23,14 @@ How to use it:
 - `npm install` in fuse-npm dir
 - `node <path_to_loadmodule>/loadmodules.js <package>` in your Fuse app dir
 - Bundle the js files in your app. Edit `.unoproj`:
-
-    "Includes": [
-      "*.uno",
-      "*.ux",
-      "*.uxl",
-      "fusejs_lib/*.js"
-    ]
-
+```
+"Includes": [
+  "*.uno",
+  "*.ux",
+  "*.uxl",
+  "fusejs_lib/*.js:Bundle"
+]
+```
 - Filenames are changed so look for the correct file in fusejs_lib, and use it as `require ('new_name');`
 
 
