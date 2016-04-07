@@ -1,6 +1,21 @@
 Fuse NPM
 ========
 
+
+DEFUNCT
+=======
+
+Use `[fusepm](https://github.com/bolav/fusepm) npm` instead.
+
+
+
+
+
+
+
+
+
+
 Load NPM modules in your fuse project.
 
 Status: alpha
