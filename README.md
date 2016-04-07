@@ -5,7 +5,7 @@ Fuse NPM
 DEFUNCT
 =======
 
-Use `[fusepm](https://github.com/bolav/fusepm) npm` instead.
+Use [fusepm](https://github.com/bolav/fusepm) npm instead.
 
 
 
