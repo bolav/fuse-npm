@@ -13,7 +13,8 @@ Use [fusepm](https://github.com/bolav/fusepm) npm instead.
 
 
 
-
+OLD DOCS
+========
 
 
 Load NPM modules in your fuse project.
